@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Webots project files and cached thumbnails it writes next to the worlds
+worlds/.*.wbproj
+worlds/.*.jpg
+*.wbproj
+
+# Ad-hoc single runs (sim2d.py / Webots play button). Regenerate whenever needed.
+# The experiment logs in results/experiments/*/logs ARE committed: they are the
+# data behind the report's figures and tables.
+results/logs/
+results/figs/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
