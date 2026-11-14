@@ -25,6 +25,8 @@ WHEEL_RADIUS = 0.0975          # Pioneer 3-DX (m)
 AXLE_LENGTH = 0.33             # distance between the wheels (m)
 MAX_WHEEL_SPEED = 12.0         # rad/s, just under the motor limit
 ROBOT_RADIUS = 0.26            # footprint used for collision checks (m)
+POSE_SOURCES = ("gt", "odom", "fused")
+DEFAULT_POSE_SOURCE = "gt"
 
 # ------------------------------------------------------------------- lidar
 LIDAR_NAME = "Sick LMS 291"
