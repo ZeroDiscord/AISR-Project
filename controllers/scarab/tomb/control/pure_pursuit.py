@@ -1,23 +1,30 @@
-"""Pure-pursuit path tracking for the differential drive (Coulter, 1992).
+"""Pure-pursuit path-tracking controller for a differential-drive robot.
 
-The robot steers along the arc that passes through a look-ahead point on the
-path: curvature k = 2 sin(alpha) / L_d, where alpha is the bearing of that
-point and L_d its distance. Being a differential drive, the Pioneer turns on
-the spot first when the path points far away from its heading.
+The controller follows a sequence of planned waypoints by selecting a
+look-ahead target on the path and calculating the required steering
+curvature.
+
+The target's bearing relative to the robot's heading determines the
+steering direction. Linear and angular velocity commands are generated
+to guide the robot towards the target.
+
+For large heading errors, the differential-drive robot first rotates
+in place before continuing along the path.
 """
-
 import math
 
 import numpy as np
 
 from .. import config
 
-
+"""Normalize an angle to the interval [-pi, pi]."""
 def wrap(a):
+    
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
 class PurePursuit:
+    """Track a planned path using the Pure Pursuit algorithm."""
     def __init__(self, lookahead=config.LOOKAHEAD):
         self.lookahead = lookahead
         self.path = None
@@ -34,6 +41,20 @@ class PurePursuit:
         seg = np.diff(self.path[self.idx:], axis=0)
         return float(np.hypot(seg[:, 0], seg[:, 1]).sum())
 
+        """Calculate linear and angular velocity commands for path tracking.
+
+        Selects a look-ahead target, calculates the heading error and
+        determines the required steering command.
+
+        For large heading errors, the robot rotates in place. Otherwise,
+        the controller calculates forward speed and angular velocity.
+
+        Args:
+            pose: Current robot pose represented by (x, y, yaw).
+
+        Returns:
+            A tuple containing linear velocity and angular velocity.
+        """
     def command(self, pose):
         x, y, yaw = pose
         pts = self.path

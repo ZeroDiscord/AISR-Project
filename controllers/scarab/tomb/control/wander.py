@@ -1,12 +1,16 @@
-"""Reactive 'follow the open space' behaviour.
+"""Reactive obstacle-avoidance and open-space navigation behaviour.
 
-This is the v0 explorer that makes the simulation come alive: it steers
-towards the direction in which the robot's whole body can travel furthest,
-and turns on the spot when blocked. It has no map and no goal, so it does not
-guarantee full coverage; frontier exploration + A* will replace it, and it
-stays as the baseline and as the safety layer.
+The Wander controller uses LiDAR measurements to evaluate available
+free space around the robot and select a suitable direction of travel.
+
+It estimates how far the robot can move along different headings while
+maintaining sufficient clearance from obstacles. When the forward path
+becomes blocked, the robot rotates towards the side with more available
+space.
+
+This controller does not require a map or predefined destination.
+It serves as a baseline exploration behaviour and a reactive safety layer.
 """
-
 import math
 
 import numpy as np

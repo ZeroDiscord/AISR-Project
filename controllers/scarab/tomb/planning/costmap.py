@@ -1,11 +1,16 @@
-"""Configuration-space costmap built from the occupancy grid.
+"""Configuration-space costmap generated from the occupancy grid.
 
-* clearance:   distance from every cell to the nearest OCCUPIED cell (m)
-* traversable: FREE cells with clearance > INFLATE_RADIUS, i.e. places the
-               robot's centre can be without touching anything
-* penalty:     extra step cost that grows as clearance shrinks towards the
-               inflation radius, so planned paths keep to the middle of
-               corridors instead of grazing walls
+The costmap helps the robot identify safe regions and plan paths that
+maintain sufficient distance from obstacles.
+
+Attributes:
+    clearance: Distance from each grid cell to the nearest occupied cell,
+        expressed in metres.
+    traversable: Boolean grid identifying free cells whose clearance
+        exceeds the configured obstacle inflation radius.
+    penalty: Additional traversal cost that increases as obstacle
+        clearance decreases, encouraging paths through wider and safer
+        regions of the environment.
 """
 
 import numpy as np
@@ -23,7 +28,11 @@ def shifted(a, dr, dc):
         a[max(-dr, 0):n + min(-dr, 0), max(-dc, 0):m + min(-dc, 0)]
     return b
 
+    """Generate navigation costs and safe traversal regions.
 
+    The costmap is derived from the occupancy grid and provides the
+    information required by the path planner to avoid obstacles.
+    """
 class Costmap:
     def __init__(self, state, res=config.MAP_RES):
         self.res = res

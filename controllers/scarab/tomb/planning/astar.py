@@ -40,6 +40,9 @@ def astar(costmap, start, goal):
 
     g = {(sr, sc): 0.0}
     parent = {(sr, sc): None}
+    # Priority queue entries contain:
+# (estimated total cost, accumulated cost, row, column).
+# A* expands the cell with the lowest estimated total cost first.
     heap = [(octile(sr, sc, gr, gc), 0.0, sr, sc)]
     closed = set()
     expanded = 0
@@ -59,7 +62,8 @@ def astar(costmap, start, goal):
         for dr, dc, length in MOVES:
             rr, cc = r + dr, c + dc
             if not (0 <= rr < nr and 0 <= cc < nc) or not ok[rr][cc] or (rr, cc) in closed:
-                continue
+                continue# Prevent diagonal movement if either adjacent orthogonal
+# cell is blocked. This avoids cutting across obstacle corners.
             if dr and dc and not (ok[r][cc] and ok[rr][c]):
                 continue                      # no corner cutting
             new_g = gcost + length * (1.0 + pen[rr][cc])
