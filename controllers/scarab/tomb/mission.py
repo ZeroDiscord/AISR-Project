@@ -15,6 +15,7 @@ import numpy as np
 from . import config, metrics
 from .control import Wander, teleop
 from .exploration import FrontierExplorer
+from .localization import PoseManager
 from .mapping import OccupancyGrid
 from .viz import Hud
 
@@ -24,7 +25,7 @@ DONE_FRACTION = 0.95      # explored share of the tomb that counts as 'mapped'
 
 class Mission:
     def __init__(self, io, world="unknown", mode="auto", strategy="utility", max_time=0.0,
-                 seed=0, quiet=False, shots=False, start=None, log_dir=None):
+                 seed=0, quiet=False, shots=False, start=None, log_dir=None, pose_source=None):
         """start: index into the tomb's experiment start poses (None = where the robot stands)."""
         if strategy not in config.STRATEGIES:
             raise ValueError(f"strategy must be one of {config.STRATEGIES}")
@@ -34,6 +35,9 @@ class Mission:
         self.shots = shots and hasattr(io, "export_view")
         self.start = start
         self.log_dir = log_dir or LOG_DIR
+        self.pose_source = pose_source or getattr(config, "DEFAULT_POSE_SOURCE", "gt")
+        self.pose_manager = PoseManager(mode=self.pose_source)
+        self.current_pose = (0.0, 0.0, 0.0)
         self.grid = OccupancyGrid()
         self.hud = Hud(self.grid)
         self.wander = Wander(np.random.default_rng(seed))
@@ -64,12 +68,15 @@ class Mission:
             self.log(f"start pose {self.start}: ({pose[0]:.2f}, {pose[1]:.2f}, {pose[2]:.2f} rad)")
         self.log(f"entering the {self.world} ({self.strategy}, {self.mode} mode)")
         while self.io.step():
-            x, y, yaw = self.io.pose()
-            if not np.isfinite(x):            # GPS is not ready on the very first step
+            gt_x, gt_y, gt_yaw = self.io.pose()
+            if not np.isfinite(gt_x):            # GPS is not ready on the very first step
                 continue
             scan = self.io.scan()
             self.steps += 1
+            enc = self.io.wheel_angles()
             t = self.io.time()
+            x, y, yaw = self.pose_manager.update(t, (gt_x, gt_y, gt_yaw), enc)
+            self.current_pose = (x, y, yaw)
 
             if self.steps % config.MAP_UPDATE_EVERY == 0:
                 sx = x + config.LIDAR_OFFSET_X * math.cos(yaw)
@@ -114,14 +121,14 @@ class Mission:
             path = self.save(tag="aborted")
             self.log(f"simulation ended early at {self.io.time():.1f}s; partial log saved to {path}")
             return path
-        self._update_hud(self.io.pose(), self.io.time())
+        self._update_hud(self.current_pose, self.io.time())
         self.log(self.summary())
         if self.shots:
             self.io.drive(0.0, 0.0)
             self.io.step()                    # Webots redraws the display on the next step
             self.io.export_view(self._fig_path("view_end.jpg"))
             from PIL import Image
-            Image.fromarray(self.hud.render(self.io.pose(), self.trail, self._overlay())).save(
+            Image.fromarray(self.hud.render(self.current_pose, self.trail, self._overlay())).save(
                 self._fig_path("map_end.png"))
         path = self.save()
         self.log(f"log saved to {path}")
@@ -199,11 +206,13 @@ class Mission:
         name = f"{self.world}_{self.io.source}_{self.strategy}{self._start_tag()}_{tag}_{stamp}.npz"
         path = os.path.join(self.log_dir, name)
         stats = self.explorer.stats if self.explorer is not None else {}
+        drift_stats = self.pose_manager.drift_summary()
         np.savez_compressed(
             path,
             world=self.world,
             source=self.io.source,
             strategy=self.strategy,
+            pose_source=self.pose_source,
             start=-1 if self.start is None else self.start,
             max_time=self.max_time,
             log_odds=self.grid.log_odds,
@@ -217,6 +226,11 @@ class Mission:
             t_finish=np.nan if self.t_finish is None else self.t_finish,
             path_length=self.path_length(),
             collisions=getattr(self.io, "collisions", -1),   # -1: not measured (Webots)
+            drift=np.asarray(self.pose_manager.drift_history),
+            max_pos_err=drift_stats["max_pos_err"],
+            mean_pos_err=drift_stats["mean_pos_err"],
+            final_pos_err=drift_stats["final_pos_err"],
+            max_yaw_err=drift_stats["max_yaw_err"],
             plans=stats.get("plans", 0),
             goals=stats.get("goals", 0),
             goals_reached=stats.get("reached", 0),

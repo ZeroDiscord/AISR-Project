@@ -120,10 +120,10 @@ def save_figure(io, path, scale=2):
     img.save(path)
 
 
-def run(world, strategy, sim_time, seed, quiet, start=None, log_dir=None, figure=True):
+def run(world, strategy, sim_time, seed, quiet, start=None, log_dir=None, figure=True, pose_source=None):
     io = SimIO(world, seed=seed)
     mission = Mission(io, world=world, mode="auto", strategy=strategy, max_time=sim_time,
-                      seed=seed, quiet=quiet, start=start, log_dir=log_dir)
+                      seed=seed, quiet=quiet, start=start, log_dir=log_dir, pose_source=pose_source)
     log_path = mission.run(quit_sim=True)
     if figure:
         os.makedirs(FIG_DIR, exist_ok=True)
@@ -151,12 +151,13 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--start", type=int, default=None, help="index of an experiment start pose")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--pose-source", default=config.DEFAULT_POSE_SOURCE, choices=config.POSE_SOURCES)
     args = ap.parse_args()
     worlds = ("antechamber", "labyrinth", "treasury") if args.world == "all" else (args.world,)
     strategies = config.STRATEGIES if args.strategy == "all" else (args.strategy,)
     for w in worlds:
         for s in strategies:
-            run(w, s, args.time, args.seed, quiet=not args.verbose, start=args.start)
+            run(w, s, args.time, args.seed, quiet=not args.verbose, start=args.start, pose_source=args.pose_source)
 
 
 if __name__ == "__main__":

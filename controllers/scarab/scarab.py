@@ -35,12 +35,13 @@ def main():
     ap.add_argument("--quit", action="store_true")
     ap.add_argument("--shots", action="store_true")
     ap.add_argument("--start", type=int, default=None, help="index of an experiment start pose")
+    ap.add_argument("--pose-source", default=config.DEFAULT_POSE_SOURCE, choices=config.POSE_SOURCES)
     ap.add_argument("--log-dir", default=None)
     args = ap.parse_args(sys.argv[1:] + shlex.split(os.environ.get("SCARAB_ARGS", ""), posix=False))
 
     io = WebotsIO()
     Mission(io, world=args.world, mode=args.mode, strategy=args.strategy, max_time=args.max_time,
-            seed=args.seed, shots=args.shots, start=args.start, log_dir=args.log_dir).run(quit_sim=args.quit)
+            seed=args.seed, shots=args.shots, start=args.start, log_dir=args.log_dir, pose_source=args.pose_source).run(quit_sim=args.quit)
 
 
 if __name__ == "__main__":
