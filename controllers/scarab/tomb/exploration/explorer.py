@@ -1,18 +1,18 @@
 """Frontier exploration loop.
 
-Every REPLAN_EVERY_S seconds:
-    1. build the C-space costmap from the current map,
-    2. compute path distances from the robot (wavefront),
-    3. detect and cluster frontiers, give each a reachable target,
-    4. pick a goal with the selected strategy (+ hysteresis, blacklist),
-    5. plan an A* path to it (falling back to the next candidates).
-Every control step:
-    follow the path with pure pursuit, stop if the safety check sees an
-    obstacle ahead, and give up goals that are blocked or late.
-On reaching a goal the robot turns to face its frontier: the SICK only sees
-the half-plane in front, so arriving is not the same as looking. A spot is
-blacklisted only when it is reached a second time and is still a frontier.
-Exploration finishes when no reachable frontier is left.
+At every REPLAN_EVERY_S interval:
+    1. construct the C-space costmap out of the current map,
+    2. derive path distances outward from the robot (wavefront),
+    3. find and cluster frontiers, handing each a reachable target,
+    4. settle on a goal via the chosen strategy (+ hysteresis, blacklist),
+    5. route an A* path there (falling back on the next candidates).
+At every control step:
+    track the path by pure pursuit, halt whenever the safety check spots an
+    obstacle ahead, and abandon goals that are blocked or overdue.
+Once a goal is reached the robot rotates to face its frontier, since the SICK
+covers only the half-plane ahead and so arriving is not yet looking. A spot
+earns a blacklisting only if it is reached a second time while still being a
+frontier. Exploration ends when not one reachable frontier remains.
 """
 
 import math
@@ -25,7 +25,7 @@ from ..control.pure_pursuit import PurePursuit, wrap
 from ..control.wander import front_clearance
 
 FACE_TOLERANCE = math.radians(10)
-FACE_TIMEOUT = 4.0        # s allowed for turning towards a reached frontier
+FACE_TIMEOUT = 4.0        # s permitted for rotating towards a frontier once reached
 from ..planning import Costmap, astar
 from .frontiers import detect_frontiers
 from .selection import FrontierSelector, attach_targets
@@ -37,11 +37,11 @@ class FrontierExplorer:
         self.selector = FrontierSelector(strategy)
         self.follower = PurePursuit()
         self.goal_xy = None
-        self.goal_face = None     # centroid of the goal's frontier, to look at on arrival
-        self.facing = None        # (x, y) the robot is turning towards, or None
+        self.goal_face = None     # centroid of the goal's frontier, faced on arrival
+        self.facing = None        # (x, y) the robot is rotating to face, else None
         self.facing_until = 0.0
-        self.visits = []          # goals already reached once
-        self.goal_since = 0.0     # when the current goal was first chosen
+        self.visits = []          # goals that have been reached once already
+        self.goal_since = 0.0     # time at which the present goal was first picked
         self.goal_deadline = math.inf
         self.next_plan = 0.0
         self.blocked = 0.0
@@ -67,7 +67,7 @@ class FrontierExplorer:
             self.stats["reached"] += 1
             if any(math.hypot(self.goal_xy[0] - vx, self.goal_xy[1] - vy) < config.BLACKLIST_RADIUS
                    for vx, vy in self.visits):
-                self.selector.ban(self.goal_xy)      # second arrival and still a frontier: give up
+                self.selector.ban(self.goal_xy)      # arrived twice and still a frontier: abandon it
                 self.stats["banned"] += 1
             self.visits.append(self.goal_xy)
             face = self.goal_face
@@ -81,12 +81,12 @@ class FrontierExplorer:
             self._plan(pose, t)
             self.next_plan = t + config.REPLAN_EVERY_S
         if self.follower.path is None:
-            # no path yet (e.g. the very first scans): look around on the spot
+            # still no path (the earliest scans, say): survey from where it stands
             return 0.0, (0.0 if self.finished else 0.6 * config.TURN_RATE)
 
         v, w = self.follower.command(pose)
         if v > 0 and front_clearance(scan, angles) < config.STOP_DIST:
-            v = 0.0                                   # safety layer: never drive into something
+            v = 0.0                                   # safety layer: never drive into anything
             self.blocked += dt
             if self.blocked > config.BLOCKED_TIMEOUT:
                 self._give_up("blocked", t)
@@ -100,7 +100,7 @@ class FrontierExplorer:
         self.follower.path = None
         self.blocked = 0.0
         self.status = why
-        self.next_plan = t                            # choose a new goal right away
+        self.next_plan = t                            # pick a fresh goal immediately
 
     def _give_up(self, why, t):
         self.stats["banned"] += 1

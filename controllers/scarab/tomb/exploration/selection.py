@@ -1,19 +1,20 @@
-"""Choosing which frontier to explore next.
+"""Deciding which frontier to head for next.
 
-Three strategies are compared in the report:
-  nearest  - shortest path distance (Yamauchi 1997 baseline)
-  largest  - biggest frontier cluster
-  utility  - information gain discounted by distance,
+The report compares three strategies:
+  nearest  - least path distance (the Yamauchi 1997 baseline)
+  largest  - the frontier cluster with the most cells
+  utility  - information gain damped by distance,
              U = IG * exp(-lambda * d)  (Gonzalez-Banos & Latombe 2002),
-             with IG estimated by casting rays from the goal over the map.
+             where IG comes from casting rays across the map at the goal.
 
-All strategies share two robustness rules:
-  hysteresis   - keep the current goal (tracked as its frontier recedes) for at
-                 least COMMIT_S, and after that switch only to a goal scoring
-                 HYSTERESIS times better, so the robot does not flip-flop
-                 between frontiers on opposite sides of the tomb;
-  blacklisting - goals that turned out unreachable, timed out or were already
-                 visited are never chosen again.
+Two robustness rules apply to all of them:
+  hysteresis   - hold on to the present goal (following it as its frontier
+                 retreats) for COMMIT_S at minimum, and thereafter move only
+                 to a goal scoring HYSTERESIS times higher, which keeps the
+                 robot from oscillating between frontiers at opposite ends
+                 of the tomb;
+  blacklisting - a goal that proved unreachable, ran out of time or has
+                 already been visited is never picked again.
 """
 
 import math
@@ -27,11 +28,11 @@ from .frontiers import wall_mask
 
 
 def attach_targets(frontiers, distance, grid, reach=config.FRONTIER_REACH):
-    """Give each frontier a reachable target cell near its centroid.
+    """Assign every frontier a reachable target cell close to its centroid.
 
-    Frontier cells often lie inside the inflation zone (along walls), so the
-    target is the reachable cell within `reach` of the cluster that is closest
-    to the cluster centroid.
+    Because frontier cells frequently sit within the inflation zone (hugging
+    walls), the target chosen is whichever reachable cell within `reach` of
+    the cluster lies nearest the cluster centroid.
     """
     k = int(math.ceil(reach / grid.res))
     disk = np.hypot(*np.mgrid[-k:k + 1, -k:k + 1]) <= k
@@ -56,14 +57,15 @@ def attach_targets(frontiers, distance, grid, reach=config.FRONTIER_REACH):
 
 def information_gain(state, grid, x, y, rays=config.IG_RAYS, max_range=config.LIDAR_RANGE_CAP,
                      walls=None):
-    """Area (m^2) of UNKNOWN cells a 360-degree scan from (x, y) could see.
+    """Area (m^2) of UNKNOWN cells a 360-degree scan at (x, y) could reveal.
 
-    Rays stop at the first wall cell (OCCUPIED, or unknown right next to an
-    occupied cell, see frontiers.wall_mask) so they cannot leak through
-    half-seen walls into the unknown outside the tomb; other unknown cells are
-    treated as see-through (the optimistic assumption of frontier exploration).
-    Each ray sample stands for the ring-sector r * dtheta * dr around it, so
-    the sum is an area estimate that does not depend on the number of rays.
+    Each ray halts at its first wall cell (OCCUPIED, or unknown immediately
+    adjacent to an occupied one, cf. frontiers.wall_mask), which prevents
+    leakage through half-seen walls out into the unknown beyond the tomb;
+    every other unknown cell is assumed transparent, the optimistic premise
+    behind frontier exploration. A ray sample represents the ring sector
+    r * dtheta * dr surrounding it, so the total is an area estimate that is
+    independent of how many rays are cast.
     """
     if walls is None:
         walls = wall_mask(state)
@@ -108,15 +110,15 @@ class FrontierSelector:
         return [f for f in frontiers if f.target is not None and not self.is_blacklisted(f.target_xy)]
 
     def choose(self, frontiers, state, grid, current_xy=None, may_switch=True):
-        """Best candidate, honouring hysteresis. Returns (frontier or None, ranked list).
+        """Top candidate subject to hysteresis. Returns (frontier or None, ranked list).
 
-        current_xy is the goal being pursued; may_switch is False while it is
-        still inside its commitment period.
+        current_xy is whichever goal is currently being pursued; may_switch
+        stays False while that goal remains inside its commitment period.
         """
         cands = self.candidates(frontiers)
-        # every strategy skips frontiers that would reveal almost nothing (corners
-        # behind statues, gaps narrower than the robot); this is also what lets
-        # the robot decide on its own that the tomb is finished
+        # all strategies pass over frontiers promising almost no new ground (nooks
+        # behind statues, gaps too tight for the robot); this doubles as the test
+        # by which the robot concludes for itself that the tomb is done
         walls = wall_mask(state) if cands else None
         for f in cands:
             f.gain = information_gain(state, grid, *f.target_xy, walls=walls)
